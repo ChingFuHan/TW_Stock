@@ -1,0 +1,17 @@
+*
+!.gitignore
+!logs/
+logs/*
+!logs/.gitkeep
+!processed/
+processed/*
+!processed/.gitkeep
+!raw/
+raw/*
+!raw/samples/
+!raw/samples/*.html
+!raw/samples/*.djjs
+!reference/
+reference/*
+!reference/*.csv
+!reference/*.txt

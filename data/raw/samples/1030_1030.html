@@ -1,0 +1,1580 @@
+<!DOCTYPE>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=big5">
+<script language="JavaScript"><!--
+document.writeln('<script language="JavaScript" src="/z/js/jquery.djjs"></script>\n');
+// --></script>
+<script language="JavaScript" src="/z/js/jsFunction.djjs"></script>
+<script language="JavaScript" src="/z/js/isSpecialKind.djjs"></script>
+<script language="JavaScript" src="/z/js/mdj.js"></script>
+<script type="text/javascript" src="/z/js/Applet2Canvas.djjs"></script>
+<script type="text/javascript" src="/z/js/DJWebGraph.djjs"></script>
+<script type="text/javascript" src="/z/js/xml2jsonJS.djjs"></script>
+<script type="text/javascript" src="/z/js/json2xmlJS.djjs"></script>
+<script type="text/javascript" src="/z/js/json2.djjs"></script>
+<script type="text/javascript" src="/z/js/GenUpDownJS.djjs"></script>
+<link rel=stylesheet href="/z/js/mdj.css" type="text/css">
+<title>券商進出排行</title>
+</head>
+<script language="JavaScript"><!--
+CheckMenu(8, '');
+function chkSetUpMenu(){ 
+	if (typeof(SetUpMenu) == 'function'){
+		SetUpMenu(8,'');
+}
+	else
+		setTimeout(function(){chkSetUpMenu();},5000);
+}
+// --></script>
+<body leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<div id="SysJustIFRAMEDIV">
+<table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td colspan="3" valign="top" align="left">
+<script language="javascript" src="/z/js/disableselectionjs.djjs"></script>
+<script language="javascript" src="/z/js/SU.js"></script>
+<script language="javascript"><!--
+ chkSetUpMenu();
+//--></script>
+</td></tr>
+<tr><td valign="top" align="left">
+<script language="javascript" src="/z/js/SL.js"></script>
+<script language="javascript"><!--
+ SetLeftMenu(8,'')
+//--></script>
+</td><td valign="top" width="99%">
+<script language="javascript"><!--
+if(typeof(ContentCenterBegin) == 'function'){ 	ContentCenterBegin();
+ } 
+//--></script>
+<script language="javascript" src="/z/js/zbrokerjs.djjs"></script>
+
+<script>
+	// 將字串轉為 hex 格式, eg. &#xHH
+	function toHex_js(str) {
+		var result = "";
+		if (typeof (str) !== 'string') return '';
+
+		for (var i = 0; i < str.length; i++) {
+			var partial = str.charCodeAt(i).toString(16);
+
+			while (partial.length !== 4)
+				partial = "0" + partial;
+			result += partial;
+		}
+		return result;
+	}
+
+	// 切選 券商公司List 
+	function GoPage() {
+		var sUrl = '/z/zg/zgb/zgb0.djhtm?';
+
+		var sFrmObj = document.frm;
+		var sA = sFrmObj.sel_Broker.options[sFrmObj.sel_Broker.selectedIndex].value;
+		var sB = sFrmObj.sel_BrokerBranch.options[sFrmObj.sel_BrokerBranch.selectedIndex].value;
+			//sB = toHex_js(sB);
+
+		sUrl = sUrl + 'a=' + sA + '&b=' + sB;
+		//console.log(sUrl);
+		document.location.href = sUrl;
+	}
+
+	// 切選 張數 或 金額
+	function goChg(sKind) {
+		var sUrl = '/z/zg/zgb/zgb0.djhtm?';
+
+		var sFrmObj = document.frm;
+		var sA = sFrmObj.sel_Broker.options[sFrmObj.sel_Broker.selectedIndex].value;
+		var sB = sFrmObj.sel_BrokerBranch.options[sFrmObj.sel_BrokerBranch.selectedIndex].value;
+			//sB = toHex_js(sB);
+
+		var sDay = sFrmObj.S1.options[sFrmObj.S1.selectedIndex].value;
+
+		var sDate = sFrmObj.Y2.options[sFrmObj.Y2.selectedIndex].value + '-'; 	//起始日期
+		sDate = sDate + sFrmObj.M2.options[sFrmObj.M2.selectedIndex].value + '-';
+		sDate = sDate + sFrmObj.D2.options[sFrmObj.D2.selectedIndex].value;
+
+		var eDate = sFrmObj.Y1.options[sFrmObj.Y1.selectedIndex].value + '-'; 	//結束日期
+		eDate = eDate + sFrmObj.M1.options[sFrmObj.M1.selectedIndex].value + '-';
+		eDate = eDate + sFrmObj.D1.options[sFrmObj.D1.selectedIndex].value;	// 結束日期
+
+		if (sDay != '0') {
+			sUrl = sUrl + 'a=' + sA + '&b=' + sB + '&c=' + sKind + '&d=' + sDay;
+		}
+		else {
+			sUrl = sUrl + 'a=' + sA + '&b=' + sB + '&c=' + sKind + '&e=' + sDate + '&f=' + eDate;
+		}
+		document.location.href = sUrl;
+	}
+
+	// 切選 近N 日 下拉選單
+	function goChgDay() {
+		var sUrl = '/z/zg/zgb/zgb0.djhtm?';
+
+		var sFrmObj = document.frm;
+		var sA = sFrmObj.sel_Broker.options[sFrmObj.sel_Broker.selectedIndex].value;
+		var sB = sFrmObj.sel_BrokerBranch.options[sFrmObj.sel_BrokerBranch.selectedIndex].value;
+			//sB = toHex_js(sB);
+
+		var sDay = sFrmObj.S1.options[sFrmObj.S1.selectedIndex].value;
+		var sKind = $('input[name=R1]:checked').val();
+		sUrl = sUrl + 'a=' + sA + '&b=' + sB + '&c=' + sKind + '&d=' + sDay;
+		document.location.href = sUrl;
+	}
+
+	// 切選 起訖日期之 下拉選單
+	function goChgYMD() {
+		var sUrl = '/z/zg/zgb/zgb0.djhtm?';
+
+		var sFrmObj = document.frm;
+
+		if (CheckDate()) {
+			var sA = sFrmObj.sel_Broker.options[sFrmObj.sel_Broker.selectedIndex].value;
+			var sB = sFrmObj.sel_BrokerBranch.options[sFrmObj.sel_BrokerBranch.selectedIndex].value;
+				//sB = toHex_js(sB);
+
+			var sKind = $('input[name=R1]:checked').val();
+
+			var sDate = sFrmObj.Y2.options[sFrmObj.Y2.selectedIndex].value + '-'; 	//起始日期
+			sDate = sDate + sFrmObj.M2.options[sFrmObj.M2.selectedIndex].value + '-';
+			sDate = sDate + sFrmObj.D2.options[sFrmObj.D2.selectedIndex].value;
+
+			var eDate = sFrmObj.Y1.options[sFrmObj.Y1.selectedIndex].value + '-'; 	//結束日期
+			eDate = eDate + sFrmObj.M1.options[sFrmObj.M1.selectedIndex].value + '-';
+			eDate = eDate + sFrmObj.D1.options[sFrmObj.D1.selectedIndex].value; // 結束日期				
+
+			sUrl = sUrl + 'a=' + sA + '&b=' + sB + '&c=' + sKind + '&e=' + sDate + '&f=' + eDate;
+
+			document.location.href = sUrl;
+		}
+	}
+</script>
+<table border="0">
+<tr><td class="t0" valign="top">
+	<table id="oMainTable" class="t01" border="0" cellspacing="1" cellpadding="1">
+	<form name="frm" id="frm">
+	<tr id="oScrollHead"><td class="t10" colspan="2">
+<SCRIPT LANGUAGE=javascript><!--
+ var sObj = eval('document.' + 'frm'); 
+	iID = '1030';
+	GenFundCorpCombo('1030','1030','frm');
+	for (i=0;i<sObj.sel_Broker.options.length;i++)
+	{
+		var tmpID1 = sObj.sel_Broker.options[i].value.toUpperCase();
+		if (tmpID1 == '1030') 
+		{
+			sObj.sel_Broker.selectedIndex = i;
+			break;
+		}
+	}
+	for (i=0;i<sObj.sel_BrokerBranch.options.length;i++)
+	{
+		var tmpID2 = sObj.sel_BrokerBranch.options[i].value.toUpperCase();
+		if (iID != '')
+		{
+			if (tmpID2 == iID )
+			{
+				sObj.sel_BrokerBranch.selectedIndex = i;
+				break;
+			}
+		}
+		else
+			sObj.sel_BrokerBranch.selectedIndex = 0;
+	}
+//--></SCRIPT>
+分點明細查詢
+	<div class="t11">單位：仟元 ／ 資料日期：20260402</div>	</td></tr>
+	<tr><td class="t12" colspan="2">
+	<select name="S1" onChange="javascript:goChgDay();">
+	<option value="0">請選擇</option>
+	<option value="1" selected>近一日</option>
+	<option value="5">近五日</option>
+	<option value="10">近十日</option>
+	<option value="20">近20日</option>
+	<option value="40">近40日</option>
+	</select>
+	 自設區間：
+<script language="JavaScript" src="/z/js/month.djjs"></script>
+從　<SELECT name="Y2" onChange="javascript:SetMonthDate(document.frm.Y2,document.frm.M2,document.frm.D2);">
+	<OPTION value="91"></OPTION>
+</SELECT>年 
+<SELECT name="M2" onChange="javascript:SetMonthDate(document.frm.Y2,document.frm.M2,document.frm.D2);">
+	<OPTION value="-1"></OPTION>
+</SELECT>月 
+<SELECT name="D2">
+	<OPTION value="-1"></OPTION>
+</SELECT>日 
+ ～ 
+<SELECT name="Y1" onChange="javascript:SetMonthDate(document.frm.Y1,document.frm.M1,document.frm.D1);">
+	<OPTION value="91"></OPTION>
+</SELECT>年 
+<SELECT name="M1" onChange="javascript:SetMonthDate(document.frm.Y1,document.frm.M1,document.frm.D1);">
+	<OPTION value="-1"></OPTION>
+</SELECT>月 
+<SELECT name="D1">
+	<OPTION value="-1"></OPTION>
+</SELECT>日 
+<input type='hidden' name='bDate'>
+<input type='hidden' name='eDate'>
+<SCRIPT LANGUAGE=javascript><!--
+	var toDay ='2026/4/7'
+	var getYMD1 = '2026/4/2';
+	var getYMD2 = '2026/4/2';
+	PageInit(document.frm);
+	function PageInit(obj)
+	{	//在 BODY onLoad 時候的初始化
+		ShowYear(obj.Y1,'2026/4/7',1,'N');
+		ShowYear(obj.Y2,'2026/4/7',1,'N');
+		SetOptionValue(obj.M1,1,12);
+		SetOptionValue(obj.M2,1,12);
+		//設定初始值
+		var YMDary1,Hary1;
+		if (getYMD1.indexOf(' ') > -1 ) {
+			YMDary1 = getYMD1.split(' ')[0].split('/');
+		}else {
+			YMDary1 = getYMD1.split('/');
+		}
+		SetFocus(obj.Y1,YMDary1[0]);
+		SetFocus(obj.M1,YMDary1[1]);
+		var YMDary2,Hary2;
+		if (getYMD2.indexOf(' ') > -1 ) {
+			YMDary2 = getYMD2.split(' ')[0].split('/');
+		}else {
+			YMDary2 = getYMD2.split('/');
+		}
+		SetFocus(obj.Y2,YMDary2[0]);
+		SetFocus(obj.M2,YMDary2[1]);
+		SetMonthDate(obj.Y1,obj.M1,obj.D1);
+		SetMonthDate(obj.Y2,obj.M2,obj.D2);
+		SetFocus(obj.D2,YMDary2[2]);
+		SetFocus(obj.D1,YMDary1[2]);
+		removeToday(obj.Y1,obj.M1,obj.D1,toDay);
+		removeToday(obj.Y2,obj.M2,obj.D2,toDay);
+	}
+	function CheckDate()
+	{
+		var Frm = document.frm;
+		var y1 = parseInt(Frm.Y1.options[Frm.Y1.selectedIndex].value);
+		var m1 = parseInt(Frm.M1.options[Frm.M1.selectedIndex].value);
+		var d1 = parseInt(Frm.D1.options[Frm.D1.selectedIndex].value);
+		var y2 = parseInt(Frm.Y2.options[Frm.Y2.selectedIndex].value);
+		var m2 = parseInt(Frm.M2.options[Frm.M2.selectedIndex].value);
+		var d2 = parseInt(Frm.D2.options[Frm.D2.selectedIndex].value);
+		var sEDate = y1 + '-' + m1 + '-' + d1;
+		var sBDate = y2 + '-' + m2 + '-' + d2;
+		Frm.bDate.value = sBDate;
+		Frm.eDate.value = sEDate;
+		return checkBEdate(sBDate,sEDate);
+	}
+	function checkBEdate(sBDate,sEDate)
+	{
+		var aymd1 = sBDate.split(' ')[0].split('-');
+		var aymd2 = sEDate.split(' ')[0].split('-');
+		if (aymd1.length < 3 || aymd2.length < 3 ) {
+			alert ('日期選擇錯誤!!');
+			return false;
+		}
+		var nbdate = parseInt(aymd1[0])*1000000 + parseInt(aymd1[1])*10000 + parseInt(aymd1[2])*100;
+		var nedate = parseInt(aymd2[0])*1000000 + parseInt(aymd2[1])*10000 + parseInt(aymd2[2])*100;
+		if (nbdate > nedate) {
+			alert('您所輸入的起始日期大於結束日期');
+			return false;
+		}
+		return true;
+	}
+//--></SCRIPT>
+　<INPUT type="button" name="BB" value="查詢" onclick="javascript:goChgYMD();">
+	<INPUT type="radio" name="R1" id="R1" value="E"  onClick="javascript:goChg('E');">張數　
+	<INPUT type="radio" name="R1" id="R1" value="B"  checked onClick="javascript:goChg('B');">金額　
+	</td></tr>
+	</form>
+	<tr>
+	<TD width="25%" valign="top">
+<table width="100%" class="t0" cellspacing="1" cellpadding="2" border="0" valign="top">
+<tr><td class="t2" colspan="4">買超</td></tr>
+<tr>
+<td class="t2" width="25%">券商名稱</td>
+<td class="t2" width="25%">買進金額</td>
+<td class="t2" width="25%">賣出金額</td>
+<td class="t2" width="25%">差額</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2330','台積電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>884,445</td>
+<td class="t3n1" nowrap>11,350</td>
+<td class="t3n1" nowrap>873,095</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2308','台達電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>282,494</td>
+<td class="t3n1" nowrap>1,684</td>
+<td class="t3n1" nowrap>280,810</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1476','儒鴻');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>13,575</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>13,575</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5388','中磊');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>8,343</td>
+<td class="t3n1" nowrap>80</td>
+<td class="t3n1" nowrap>8,263</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS0050','元大台灣50');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>9,581</td>
+<td class="t3n1" nowrap>1,759</td>
+<td class="t3n1" nowrap>7,822</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6515','穎崴');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>7,331</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>7,331</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1477','聚陽');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>17,386</td>
+<td class="t3n1" nowrap>10,211</td>
+<td class="t3n1" nowrap>7,175</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2317','鴻海');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>7,697</td>
+<td class="t3n1" nowrap>614</td>
+<td class="t3n1" nowrap>7,083</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2449','京元電子');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>8,866</td>
+<td class="t3n1" nowrap>2,916</td>
+<td class="t3n1" nowrap>5,950</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8210','勤誠');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>4,459</td>
+<td class="t3n1" nowrap>852</td>
+<td class="t3n1" nowrap>3,607</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2313','華通');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>10,902</td>
+<td class="t3n1" nowrap>7,540</td>
+<td class="t3n1" nowrap>3,362</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2327','國巨*');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>3,569</td>
+<td class="t3n1" nowrap>256</td>
+<td class="t3n1" nowrap>3,313</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8299','群聯');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>4,292</td>
+<td class="t3n1" nowrap>1,675</td>
+<td class="t3n1" nowrap>2,617</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00981A');">00981A主動統一台股增長</a>
+</td>
+<td class="t3n1" nowrap>2,834</td>
+<td class="t3n1" nowrap>416</td>
+<td class="t3n1" nowrap>2,418</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2454','聯發科');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,299</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>2,299</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS0056','元大高股息');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,377</td>
+<td class="t3n1" nowrap>115</td>
+<td class="t3n1" nowrap>2,262</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3017','奇鋐');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,150</td>
+<td class="t3n1" nowrap>21</td>
+<td class="t3n1" nowrap>2,129</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3665','貿聯-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,137</td>
+<td class="t3n1" nowrap>62</td>
+<td class="t3n1" nowrap>2,075</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1304','台聚');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,500</td>
+<td class="t3n1" nowrap>444</td>
+<td class="t3n1" nowrap>2,056</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6643','M31');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,956</td>
+<td class="t3n1" nowrap>48</td>
+<td class="t3n1" nowrap>1,908</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS9802','鈺齊-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>4,804</td>
+<td class="t3n1" nowrap>3,032</td>
+<td class="t3n1" nowrap>1,772</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6789','采鈺');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>4,243</td>
+<td class="t3n1" nowrap>2,538</td>
+<td class="t3n1" nowrap>1,705</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00919');">00919群益台灣精選高息</a>
+</td>
+<td class="t3n1" nowrap>1,653</td>
+<td class="t3n1" nowrap>22</td>
+<td class="t3n1" nowrap>1,631</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2303','聯電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,581</td>
+<td class="t3n1" nowrap>27</td>
+<td class="t3n1" nowrap>1,554</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6683','雍智科技');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,510</td>
+<td class="t3n1" nowrap>16</td>
+<td class="t3n1" nowrap>1,494</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS9914','美利達');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,483</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,483</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6274','台燿');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>4,745</td>
+<td class="t3n1" nowrap>3,321</td>
+<td class="t3n1" nowrap>1,424</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2368','金像電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>8,814</td>
+<td class="t3n1" nowrap>7,409</td>
+<td class="t3n1" nowrap>1,405</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('006208');">006208富邦台50</a>
+</td>
+<td class="t3n1" nowrap>1,407</td>
+<td class="t3n1" nowrap>21</td>
+<td class="t3n1" nowrap>1,386</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3264','欣銓');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,648</td>
+<td class="t3n1" nowrap>1,307</td>
+<td class="t3n1" nowrap>1,341</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5871','中租-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,298</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,298</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8069','元太');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,437</td>
+<td class="t3n1" nowrap>142</td>
+<td class="t3n1" nowrap>1,295</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00878');">00878國泰永續高股息</a>
+</td>
+<td class="t3n1" nowrap>1,391</td>
+<td class="t3n1" nowrap>112</td>
+<td class="t3n1" nowrap>1,279</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6488','環球晶');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,274</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,274</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00929');">00929復華台灣科技優息</a>
+</td>
+<td class="t3n1" nowrap>1,332</td>
+<td class="t3n1" nowrap>76</td>
+<td class="t3n1" nowrap>1,256</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2382','廣達');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,196</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,196</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2049','上銀');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,167</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,167</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00687B');">00687B國泰20年美債</a>
+</td>
+<td class="t3n1" nowrap>1,195</td>
+<td class="t3n1" nowrap>28</td>
+<td class="t3n1" nowrap>1,167</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3702','大聯大');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,233</td>
+<td class="t3n1" nowrap>91</td>
+<td class="t3n1" nowrap>1,142</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3044','健鼎');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,043</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,043</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3231','緯創');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,294</td>
+<td class="t3n1" nowrap>252</td>
+<td class="t3n1" nowrap>1,042</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2367','燿華');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,876</td>
+<td class="t3n1" nowrap>1,873</td>
+<td class="t3n1" nowrap>1,003</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3026','禾伸堂');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>972</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>972</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5234','達興材料');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,280</td>
+<td class="t3n1" nowrap>364</td>
+<td class="t3n1" nowrap>916</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6770','力積電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,244</td>
+<td class="t3n1" nowrap>1,383</td>
+<td class="t3n1" nowrap>861</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS0052','富邦科技');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>840</td>
+<td class="t3n1" nowrap>7</td>
+<td class="t3n1" nowrap>833</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS4919','新唐');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,677</td>
+<td class="t3n1" nowrap>871</td>
+<td class="t3n1" nowrap>806</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8215','明基材');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>993</td>
+<td class="t3n1" nowrap>241</td>
+<td class="t3n1" nowrap>752</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5511','德昌');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>739</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>739</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS7728','光焱科技');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>700</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>700</td>
+</tr>
+</table>
+	</TD>
+	<TD width="25%" valign="top">
+<table width="100%" class="t0" cellspacing="1" cellpadding="2" border="0" valign="top">
+<tr><td class="t2" colspan="4">賣超</td></tr>
+<tr>
+<td class="t2" width="25%">券商名稱</td>
+<td class="t2" width="25%">買進金額</td>
+<td class="t2" width="25%">賣出金額</td>
+<td class="t2" width="25%">差額</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00642U');">00642U期元大S＆P石油</a>
+</td>
+<td class="t3n1" nowrap>1,470</td>
+<td class="t3n1" nowrap>20,439</td>
+<td class="t3n1" nowrap>-18,969</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3105','穩懋');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>11,264</td>
+<td class="t3n1" nowrap>18,865</td>
+<td class="t3n1" nowrap>-7,601</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3037','欣興');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>5,055</td>
+<td class="t3n1" nowrap>11,310</td>
+<td class="t3n1" nowrap>-6,255</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3443','創意');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>4,640</td>
+<td class="t3n1" nowrap>-4,640</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2891','中信金');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>64</td>
+<td class="t3n1" nowrap>4,105</td>
+<td class="t3n1" nowrap>-4,041</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2409','友達');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>999</td>
+<td class="t3n1" nowrap>4,918</td>
+<td class="t3n1" nowrap>-3,919</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3163','波若威');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,813</td>
+<td class="t3n1" nowrap>6,601</td>
+<td class="t3n1" nowrap>-3,788</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8046','南電');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>5,332</td>
+<td class="t3n1" nowrap>8,659</td>
+<td class="t3n1" nowrap>-3,327</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3596','智易');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>3</td>
+<td class="t3n1" nowrap>3,286</td>
+<td class="t3n1" nowrap>-3,283</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2027','大成鋼');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>266</td>
+<td class="t3n1" nowrap>3,223</td>
+<td class="t3n1" nowrap>-2,957</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2455','全新');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>18</td>
+<td class="t3n1" nowrap>2,257</td>
+<td class="t3n1" nowrap>-2,239</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5475','德宏');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,997</td>
+<td class="t3n1" nowrap>-1,997</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3081','聯亞');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,795</td>
+<td class="t3n1" nowrap>3,780</td>
+<td class="t3n1" nowrap>-1,985</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8039','台虹');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,802</td>
+<td class="t3n1" nowrap>-1,802</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3189','景碩');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>361</td>
+<td class="t3n1" nowrap>2,051</td>
+<td class="t3n1" nowrap>-1,690</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS4772','台特化');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,689</td>
+<td class="t3n1" nowrap>-1,689</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS7751','竑騰');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,665</td>
+<td class="t3n1" nowrap>-1,665</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2395','研華');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,593</td>
+<td class="t3n1" nowrap>-1,593</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3714','富采');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>103</td>
+<td class="t3n1" nowrap>1,669</td>
+<td class="t3n1" nowrap>-1,566</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS8027','鈦昇');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>440</td>
+<td class="t3n1" nowrap>1,971</td>
+<td class="t3n1" nowrap>-1,531</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS9921','巨大');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,488</td>
+<td class="t3n1" nowrap>-1,488</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3293','鈊象');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>34</td>
+<td class="t3n1" nowrap>1,520</td>
+<td class="t3n1" nowrap>-1,486</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00830');">00830國泰費城半導體</a>
+</td>
+<td class="t3n1" nowrap>279</td>
+<td class="t3n1" nowrap>1,726</td>
+<td class="t3n1" nowrap>-1,447</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3491','昇達科');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,661</td>
+<td class="t3n1" nowrap>3,040</td>
+<td class="t3n1" nowrap>-1,379</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6213','聯茂');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>2,068</td>
+<td class="t3n1" nowrap>3,444</td>
+<td class="t3n1" nowrap>-1,376</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1309','台達化');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>798</td>
+<td class="t3n1" nowrap>2,115</td>
+<td class="t3n1" nowrap>-1,317</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3093','港建*');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,245</td>
+<td class="t3n1" nowrap>-1,245</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6147','頎邦');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,243</td>
+<td class="t3n1" nowrap>-1,243</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS7717','萊德光電-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>270</td>
+<td class="t3n1" nowrap>1,462</td>
+<td class="t3n1" nowrap>-1,192</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6257','矽格');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>304</td>
+<td class="t3n1" nowrap>1,399</td>
+<td class="t3n1" nowrap>-1,095</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00918');">00918大華優利高填息30</a>
+</td>
+<td class="t3n1" nowrap>248</td>
+<td class="t3n1" nowrap>1,338</td>
+<td class="t3n1" nowrap>-1,090</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<a href="javascript:Link2Stk('00933B');">00933B國泰10Y+金融債</a>
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>1,049</td>
+<td class="t3n1" nowrap>-1,049</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3583','辛耘');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>946</td>
+<td class="t3n1" nowrap>-946</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2476','鉅祥');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>943</td>
+<td class="t3n1" nowrap>-943</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2451','創見');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>942</td>
+<td class="t3n1" nowrap>-942</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS2481','強茂');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>381</td>
+<td class="t3n1" nowrap>1,312</td>
+<td class="t3n1" nowrap>-931</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS4958','臻鼎-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>19,381</td>
+<td class="t3n1" nowrap>20,247</td>
+<td class="t3n1" nowrap>-866</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6509','聚和');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>89</td>
+<td class="t3n1" nowrap>901</td>
+<td class="t3n1" nowrap>-812</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3034','聯詠');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>770</td>
+<td class="t3n1" nowrap>-770</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3481','群創');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>1,719</td>
+<td class="t3n1" nowrap>2,459</td>
+<td class="t3n1" nowrap>-740</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3711','日月光投控');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>814</td>
+<td class="t3n1" nowrap>1,534</td>
+<td class="t3n1" nowrap>-720</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3014','聯陽');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>698</td>
+<td class="t3n1" nowrap>-698</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6456','GIS-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>690</td>
+<td class="t3n1" nowrap>-690</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6451','訊芯-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>658</td>
+<td class="t3n1" nowrap>-658</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS6446','藥華藥');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>633</td>
+<td class="t3n1" nowrap>-633</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS4971','IET-KY');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>579</td>
+<td class="t3n1" nowrap>-579</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1102','亞泥');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>3</td>
+<td class="t3n1" nowrap>566</td>
+<td class="t3n1" nowrap>-563</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS5443','均豪');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>499</td>
+<td class="t3n1" nowrap>-499</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS1717','長興');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>0</td>
+<td class="t3n1" nowrap>497</td>
+<td class="t3n1" nowrap>-497</td>
+</tr>
+<tr>
+<td class="t4t1" nowrap id="oAddCheckbox">
+<SCRIPT LANGUAGE=javascript>
+<!--
+	GenLink2stk('AS3551','世禾');
+//-->
+</SCRIPT>
+
+</td>
+<td class="t3n1" nowrap>17</td>
+<td class="t3n1" nowrap>510</td>
+<td class="t3n1" nowrap>-493</td>
+</tr>
+</table>
+	</TD>
+	</tr>
+	</table>
+</td></tr>
+</table>
+<script language="javascript"><!--
+if(typeof(ContentCenterEnd) == 'function'){ 	ContentCenterEnd();
+ } 
+//--></script>
+</td><td valign="top" align="right">
+<script language="javascript" src="/z/js/SR.js"></script>
+</td></tr>
+<tr><td colspan="3" valign="top">
+<script language="javascript" src="/z/js/SD.js"></script>
+</td></tr></table>
+</div>
+</body>
+</html>
