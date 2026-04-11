@@ -110,8 +110,8 @@ def upsert_brokers(conn: Any, lookup: dict, now_iso: str, dry_run: bool = False)
             
             sql = (
                 "INSERT INTO public.brokers(broker_code, broker_name, fetched_at) "
-                f"VALUES (%s, %s, %s) "
-                "ON CONFLICT (broker_code) DO UPDATE SET broker_name = EXCLUDED.broker_name, fetched_at = EXCLUDED.fetched_at;"
+                "VALUES (%s, %s, %s) "
+                "ON CONFLICT DO NOTHING;"
             )
             
             try:
@@ -183,9 +183,7 @@ def upsert_branches(conn: Any, lookup: dict, now_iso: str, dry_run: bool = False
                     "INSERT INTO public.branches(broker_code, branch_code_raw, branch_code, "
                     "branch_name, is_broker_level, fetched_at) "
                     "VALUES (%s, %s, %s, %s, %s, %s) "
-                    "ON CONFLICT (broker_code, branch_code_raw) DO UPDATE SET "
-                    "branch_code = EXCLUDED.branch_code, branch_name = EXCLUDED.branch_name, "
-                    "is_broker_level = EXCLUDED.is_broker_level, fetched_at = EXCLUDED.fetched_at;"
+                    "ON CONFLICT DO NOTHING;"
                 )
                 
                 try:
