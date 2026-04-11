@@ -6,6 +6,8 @@ import ssl
 from typing import Any, cast
 import urllib.request
 from urllib.parse import urlencode, urljoin
+import sys
+import os
 
 
 BROKER_LIST_PATTERN = re.compile(r"var\s+g_BrokerList\s*=\s*'(.*?)';", re.S)
@@ -175,26 +177,47 @@ def build_target_urls(
     base_url: str = DEFAULT_PAGE_URL,
     metric_type: str = "amount",
 ) -> list[str]:
+    """
+    Generate daily URLs for each branch in the date range.
+    Each URL represents a single trading day query.
+    Only generates URLs for weekdays (Mon-Fri), excluding weekends.
+    """
+    from datetime import datetime, timedelta
+    
     urls: list[str] = []
     seen: set[str] = set()
 
-    for row in branch_rows:
-        code1 = str(row.get("code1", "")).strip()
-        code2 = str(row.get("code2", "")).strip()
-        if not code1 or not code2:
-            continue
+    # Parse dates and generate all trading days in range
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    # Generate URL for each weekday + each branch
+    current = start
+    while current <= end:
+        # Skip weekends (5=Saturday, 6=Sunday)
+        if current.weekday() < 5:
+            current_date_str = current.strftime("%Y-%m-%d")
+            
+            for row in branch_rows:
+                code1 = str(row.get("code1", "")).strip()
+                code2 = str(row.get("code2", "")).strip()
+                if not code1 or not code2:
+                    continue
 
-        url = build_branch_url(
-            start_date=start_date,
-            end_date=end_date,
-            code1=code1,
-            code2=code2,
-            base_url=base_url,
-            metric_type=metric_type,
-        )
-        if url not in seen:
-            urls.append(url)
-            seen.add(url)
+                # For daily queries, both start and end should be the same date
+                url = build_branch_url(
+                    start_date=current_date_str,
+                    end_date=current_date_str,
+                    code1=code1,
+                    code2=code2,
+                    base_url=base_url,
+                    metric_type=metric_type,
+                )
+                if url not in seen:
+                    urls.append(url)
+                    seen.add(url)
+        
+        current += timedelta(days=1)
 
     return urls
 
@@ -277,3 +300,97 @@ def normalize_branch_code(branch_code: str | None) -> str | None:
         return decoded.upper()
 
     return value
+
+
+def load_lookup_from_db(dbname: str, include_branches: bool = True, db_schema: str = "public") -> LookupData:
+    """
+    Load lookup data from Postgres reference tables.
+
+    Returns a LookupData dict compatible with parse_lookup/load_lookup_from_path.
+    """
+    lookup = create_lookup_data()
+    broker_names = get_broker_names(lookup)
+    branch_names = get_branch_names(lookup)
+    broker_branches = get_broker_branches(lookup)
+
+    db_util = None
+    conn = None
+    cur = None
+
+    # Try to import db_util from pg_sample_code (same approach as db_writer)
+    try:
+        project_root = Path(__file__).resolve().parents[2]
+        pg_sample = project_root / "pg_sample_code"
+        if pg_sample.exists():
+            sys.path.insert(0, str(pg_sample))
+        import db_util as _db_util  # type: ignore
+        db_util = _db_util
+    except Exception:
+        db_util = None
+
+    try:
+        if db_util is not None:
+            conn = db_util.getconn(dbname)
+        else:
+            try:
+                import psycopg2  # type: ignore
+            except Exception as exc:
+                raise RuntimeError("psycopg2 is required to load lookup from DB when db_util is not available") from exc
+
+            dsn = os.environ.get("DATABASE_URL") or os.environ.get("DB_DSN")
+            if dsn:
+                conn = psycopg2.connect(dsn)
+            else:
+                conn = psycopg2.connect(
+                    dbname=dbname,
+                    host=os.environ.get("PGHOST", "127.0.0.1"),
+                    port=os.environ.get("PGPORT", "5432"),
+                    user=os.environ.get("PGUSER", "postgres"),
+                    password=os.environ.get("PGPASSWORD", ""),
+                )
+
+        cur = conn.cursor()
+        cur.execute(f"SELECT broker_code, broker_name FROM {db_schema}.brokers;")
+        for row in cur.fetchall():
+            code = row[0]
+            name = row[1] if row[1] is not None else ""
+            if code:
+                broker_names[str(code)] = str(name)
+
+        if include_branches:
+            cur.execute(f"SELECT broker_code, branch_code_raw, branch_name FROM {db_schema}.branches;")
+            for row in cur.fetchall():
+                bcode = row[0]
+                branch_raw = row[1]
+                branch_name = row[2] if row[2] is not None else ""
+                if not bcode or not branch_raw:
+                    continue
+                bcode = str(bcode)
+                branch_raw = str(branch_raw)
+                branch_name = str(branch_name)
+                broker_branches.setdefault(bcode, {})[branch_raw] = branch_name
+                branch_names[branch_raw] = branch_name
+
+    finally:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn is not None:
+            if db_util is not None:
+                try:
+                    # return to pool if available
+                    db_util.conn_pools[dbname].putconn(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return lookup

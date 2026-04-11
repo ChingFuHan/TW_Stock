@@ -181,6 +181,30 @@ def parse_page(
     fetched_at: str,
     broker_lookup: LookupData | None = None,
 ) -> dict[str, object]:
+    # Early check for empty trading data (common, not an error)
+    if "無此券商分點交易資料" in html_text or "無交易資料" in html_text:
+        broker_code, branch_code_raw = parse_selected_codes(html_text, source_url)
+        branch_code = normalize_branch_code(branch_code_raw)
+        
+        broker_name = None
+        branch_name = None
+        if broker_lookup is not None:
+            broker_name, branch_name = resolve_names(broker_lookup, broker_code, branch_code_raw)
+        
+        return {
+            "trade_date": None,
+            "unit_label": None,
+            "metric_type": None,
+            "broker_code": broker_code,
+            "branch_code": branch_code,
+            "branch_code_raw": branch_code_raw,
+            "broker_name": broker_name,
+            "branch_name": branch_name,
+            "lookback_days": None,
+            "lookback_label": None,
+            "records": [],
+        }
+    
     trade_date = parse_trade_date(html_text)
     unit_label = parse_unit_label(html_text)
     metric_type = parse_metric_type(html_text)
@@ -246,9 +270,6 @@ def parse_page(
                 "fetched_at": fetched_at,
             }
             records.append(record)
-
-    if not records:
-        raise ParseError("No stock flow rows were parsed from the page.")
 
     return {
         "trade_date": trade_date,

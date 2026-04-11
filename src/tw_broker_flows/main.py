@@ -6,8 +6,11 @@ from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
+import threading
 import time
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from queue import Queue
 
 from .broker_lookup import (
     DEFAULT_PAGE_URL,
@@ -18,6 +21,7 @@ from .broker_lookup import (
     iter_company_rows,
     load_lookup_from_path,
     merge_lookup_data,
+    load_lookup_from_db,
 )
 from .fetcher import fetch_url
 from .parser import ParseError, parse_page
@@ -47,6 +51,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default="data", help="Output directory. Defaults to ./data")
     parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds.")
     parser.add_argument("--lookup-js", help="Path to a local zbrokerjs.djjs file.")
+    parser.add_argument("--lookup-db", help="Load broker/branch lookup from Postgres DB name (public.brokers/public.branches).")
     parser.add_argument("--skip-lookup", action="store_true", help="Do not resolve broker/branch names.")
     parser.add_argument(
         "--all-branches",
@@ -63,6 +68,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="Delay between requests. Useful for batch scans.")
     parser.add_argument("--max-targets", type=int, help="Optional limit for generated targets.")
     parser.add_argument("--export-lookup-only", action="store_true", help="Only export brokers/branches reference CSVs and exit.")
+    parser.add_argument("--db-name", help="Write parsed records directly to Postgres DB name (uses pg_sample_code/db_util if available or env vars).")
+    parser.add_argument("--db-chunk", type=int, default=200, help="Rows per DB batch insert when --db-name is used.")
+    parser.add_argument("--max-workers", type=int, default=5, help="Max concurrent fetch workers. Increase to speed up scraping (default: 5).")
+    parser.add_argument("--retry-count", type=int, default=2, help="Retry failed requests up to N times (default: 2).")
+    parser.add_argument("--retry-delay", type=float, default=1.0, help="Initial delay for exponential backoff in seconds (default: 1.0).")
     return parser
 
 
@@ -164,9 +174,19 @@ def resolve_date_range(args: argparse.Namespace) -> tuple[str, str]:
 def load_lookup(urls: list[str], args: argparse.Namespace, branch_rows: list[dict[str, object]]) -> Any:
     broker_lookup = None
     if not args.skip_lookup:
-        if args.lookup_js:
+        # Prefer DB lookup when provided
+        if getattr(args, "lookup_db", None):
+            try:
+                broker_lookup = load_lookup_from_db(args.lookup_db)
+            except Exception as exc:
+                logging.warning("DB lookup failed, continuing with other sources: %s", exc)
+
+        # Next prefer local lookup JS if provided
+        if broker_lookup is None and args.lookup_js:
             broker_lookup = load_lookup_from_path(args.lookup_js)
-        else:
+
+        # Finally try network fetch
+        if broker_lookup is None:
             lookup_source_url = urls[0] if urls else args.base_url
             try:
                 broker_lookup = fetch_lookup(lookup_source_url, timeout=args.timeout)
@@ -236,6 +256,168 @@ def deduplicate_urls(urls: list[str]) -> list[str]:
     return deduplicated
 
 
+def fetch_and_parse_url(
+    url: str,
+    args: argparse.Namespace,
+    broker_lookup: Any,
+    output_root: Path,
+    retry_count: int = 0,
+) -> tuple[str, dict[str, object] | None, dict[str, object] | None, str | None]:
+    """
+    Fetch and parse a single URL. Returns (url, parsed_result, fetch_result, error_msg).
+    Implements retry with exponential backoff.
+    """
+    try:
+        fetch_result = fetch_url(url, timeout=args.timeout)
+        parsed = parse_page(
+            html_text=fetch_result["text"],
+            source_url=url,
+            fetched_at=fetch_result["fetched_at"],
+            broker_lookup=broker_lookup,
+        )
+        return url, parsed, fetch_result, None
+    except ParseError as exc:
+        return url, None, None, f"Parse failed: {exc}"
+    except Exception as exc:
+        if retry_count < args.retry_count:
+            backoff = args.retry_delay * (2 ** retry_count)
+            time.sleep(backoff)
+            return fetch_and_parse_url(url, args, broker_lookup, output_root, retry_count + 1)
+        return url, None, None, f"Fetch failed after {args.retry_count + 1} attempts: {exc}"
+
+
+def process_concurrent_urls(
+    urls: list[str],
+    args: argparse.Namespace,
+    broker_lookup: Any,
+    output_root: Path,
+) -> tuple[int, int]:
+    """
+    Fetch and process URLs concurrently using ThreadPoolExecutor.
+    Returns (success_count, failure_count).
+    
+    Uses streaming/queue-based approach to avoid memory explosion
+    with large URL lists (2.8M+ URLs).
+    """
+    failures = 0
+    success_count = 0
+    accumulated_records: list[dict[str, object]] = []
+    
+    # Use a queue-based approach instead of submitting all at once
+    # This prevents memory explosion with large URL counts
+    futures_queue = Queue(maxsize=args.max_workers * 4)
+    
+    def submit_urls():
+        """Background thread to submit URLs to executor."""
+        with ThreadPoolExecutor(max_workers=1) as submitter:
+            for idx, url in enumerate(urls, start=1):
+                future = executor.submit(
+                    fetch_and_parse_url, url, args, broker_lookup, output_root
+                )
+                futures_queue.put((future, url, idx))
+                
+                # Log progress every 10k URLs submitted
+                if idx % 10000 == 0:
+                    logging.info("[QUEUE] Submitted %s/%s URLs", idx, len(urls))
+            
+            # Signal completion
+            futures_queue.put(None)
+    
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        # Start background submission thread
+        submit_thread = threading.Thread(target=submit_urls, daemon=True)
+        submit_thread.start()
+        
+        # Process results as they complete
+        processed = 0
+        while True:
+            item = futures_queue.get()
+            if item is None:
+                break
+            
+            future, url, task_index = item
+            processed += 1
+            
+            try:
+                url_result, parsed, fetch_result, error_msg = future.result()
+
+                if error_msg:
+                    failures += 1
+                    logging.error("[%s/%s] %s for %s", task_index, len(urls), error_msg, url)
+                    continue
+
+                if parsed is None:
+                    failures += 1
+                    continue
+
+                success_count += 1
+                trade_date = parsed["trade_date"]
+                branch_code = parsed["branch_code"]
+                metric_type = parsed["metric_type"]
+                
+                # Write raw HTML
+                if fetch_result:
+                    raw_path = build_raw_html_path(output_root, trade_date, url, branch_code, metric_type)
+                    write_raw_html(raw_path, fetch_result["content"])
+                
+                if args.db_name:
+                    # Accumulate records for batch insert
+                    accumulated_records.extend(parsed["records"])
+                    
+                    # Flush batch if reaching threshold
+                    if len(accumulated_records) >= args.db_chunk * 2:
+                        try:
+                            from .db_writer import insert_records
+                            inserted = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
+                            logging.info(
+                                "[%s/%s] Flushed %s records into DB=%s",
+                                task_index,
+                                len(urls),
+                                inserted,
+                                args.db_name,
+                            )
+                            accumulated_records = []
+                        except Exception as exc:
+                            failures += 1
+                            logging.exception("[%s/%s] DB insert failed: %s", task_index, len(urls), exc)
+                            accumulated_records = []
+                else:
+                    # Write CSV immediately
+                    csv_path = build_processed_csv_path(output_root, trade_date, url, branch_code, metric_type)
+                    write_csv(csv_path, parsed["records"])
+                    logging.info(
+                        "[%s/%s] Parsed %s rows for branch=%s metric=%s trade_date=%s -> %s",
+                        task_index,
+                        len(urls),
+                        len(parsed["records"]),
+                        branch_code,
+                        metric_type,
+                        trade_date,
+                        csv_path,
+                    )
+
+            except Exception as exc:
+                failures += 1
+                logging.exception("[%s/%s] Task failed for %s: %s", task_index, len(urls), url, exc)
+            
+            # Log progress every 1000 processed
+            if processed % 1000 == 0:
+                logging.info("[PROGRESS] Processed %s/%s URLs (success=%s failures=%s)", 
+                           processed, len(urls), success_count, failures)
+
+        # Flush remaining records
+        if accumulated_records and args.db_name:
+            try:
+                from .db_writer import insert_records
+                inserted = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
+                logging.info("Final flush: inserted %s records into DB=%s", inserted, args.db_name)
+            except Exception as exc:
+                failures += len(accumulated_records)
+                logging.exception("Final DB insert failed: %s", exc)
+
+    return success_count, failures
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
@@ -291,47 +473,9 @@ def main(argv: list[str] | None = None) -> int:
     if not urls:
         parser.error("No target URLs provided. Use --url, --targets-file, --branch-codes-file, or --all-branches.")
 
-    logging.info("Starting scrape for %s targets", len(urls))
+    logging.info("Starting scrape for %s targets with max_workers=%d", len(urls), args.max_workers)
 
-    failures = 0
-    for index, url in enumerate(urls, start=1):
-        try:
-            fetch_result = fetch_url(url, timeout=args.timeout)
-            parsed = parse_page(
-                html_text=fetch_result["text"],
-                source_url=url,
-                fetched_at=fetch_result["fetched_at"],
-                broker_lookup=broker_lookup,
-            )
-
-            trade_date = parsed["trade_date"]
-            branch_code = parsed["branch_code"]
-            metric_type = parsed["metric_type"]
-            raw_path = build_raw_html_path(output_root, trade_date, url, branch_code, metric_type)
-            csv_path = build_processed_csv_path(output_root, trade_date, url, branch_code, metric_type)
-
-            write_raw_html(raw_path, fetch_result["content"])
-            write_csv(csv_path, parsed["records"])
-
-            logging.info(
-                "[%s/%s] Parsed %s rows for branch=%s metric=%s trade_date=%s -> %s",
-                index,
-                len(urls),
-                len(parsed["records"]),
-                branch_code,
-                metric_type,
-                trade_date,
-                csv_path,
-            )
-        except ParseError as exc:
-            failures += 1
-            logging.exception("[%s/%s] Parse failed for %s: %s", index, len(urls), url, exc)
-        except Exception as exc:  # pragma: no cover - network-path fallback
-            failures += 1
-            logging.exception("[%s/%s] Fetch failed for %s: %s", index, len(urls), url, exc)
-
-        if args.delay_seconds > 0 and index < len(urls):
-            time.sleep(args.delay_seconds)
-
-    logging.info("Finished. failures=%s log=%s", failures, log_path)
+    success_count, failures = process_concurrent_urls(urls, args, broker_lookup, output_root)
+    
+    logging.info("Finished. successes=%s failures=%s log=%s", success_count, failures, log_path)
     return 1 if failures else 0
