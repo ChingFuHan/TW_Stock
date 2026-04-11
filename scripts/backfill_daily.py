@@ -33,7 +33,7 @@ import json
 import logging
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -45,6 +45,7 @@ PROGRESS_FILE = PROJECT_ROOT / "data" / "logs" / "backfill_progress.json"
 DEFAULT_METRIC = "lots"
 DEFAULT_MAX_WORKERS = 15
 DEFAULT_DELAY_BETWEEN_DAYS = 1.0  # 秒，避免被封鎖
+DEFAULT_EMPTY_RETRY_DAYS = 30  # 空資料在此天數內仍會重試
 
 # ---------------------------------------------------------------------------
 # 日誌設定
@@ -119,6 +120,24 @@ def generate_weekdays(start_date: str, end_date: str) -> list[str]:
         current += timedelta(days=1)
 
     return dates
+
+
+def is_empty_and_recent(progress: dict, date_str: str, retry_days: int) -> bool:
+    """
+    判斷某日是否為「近期空資料」——應該重試而非永久跳過。
+
+    規則：
+    - 該日已完成但 csv_count == 0（空資料）
+    - 距離今天不超過 retry_days 天
+    - 超過 retry_days 天的空資料視為永久完成（假日/非交易日）
+    """
+    entry = progress["completed_dates"].get(date_str)
+    if not entry:
+        return False
+    if entry.get("csv_count", 0) > 0:
+        return False  # 有資料，不需要重試
+    d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    return (date.today() - d).days <= retry_days
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +256,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-skip-existing", action="store_true",
         help="不跳過已有 CSV 的日期（強制重抓）",
     )
+    parser.add_argument(
+        "--empty-retry-days", type=int, default=DEFAULT_EMPTY_RETRY_DAYS,
+        help=f"空資料日期的重試天數窗口 (預設: {DEFAULT_EMPTY_RETRY_DAYS})。"
+             f"距離今天 N 天內的空資料仍會重新抓取，超過則視為永久完成（假日）。"
+             f"設為 0 則不重試空資料。",
+    )
     return parser
 
 
@@ -263,10 +288,16 @@ def main(argv: list[str] | None = None) -> int:
     dates_to_scrape: list[str] = []
     skipped_progress = 0
     skipped_existing = 0
+    retry_empty = 0
 
     for d in all_dates:
         # 跳過已完成（進度檔案記錄的）
         if args.resume and d in progress["completed_dates"]:
+            # 空資料在重試窗口內 → 仍需重新抓取
+            if is_empty_and_recent(progress, d, args.empty_retry_days):
+                retry_empty += 1
+                dates_to_scrape.append(d)
+                continue
             skipped_progress += 1
             continue
 
@@ -292,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         f"待抓取: {len(dates_to_scrape)} 天, "
         f"已跳過(進度): {skipped_progress}, "
         f"已跳過(既有CSV): {skipped_existing}"
+        + (f", 空資料重試: {retry_empty}" if retry_empty > 0 else "")
     )
 
     if args.dry_run:
