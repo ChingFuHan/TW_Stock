@@ -291,16 +291,21 @@ def process_concurrent_urls(
     args: argparse.Namespace,
     broker_lookup: Any,
     output_root: Path,
-) -> tuple[int, int]:
+) -> dict[str, int]:
     """
     Fetch and process URLs concurrently using ThreadPoolExecutor.
-    Returns (success_count, failure_count).
+    Returns aggregate stats for parsed pages and DB writes.
     
     Uses streaming/queue-based approach to avoid memory explosion
     with large URL lists (2.8M+ URLs).
     """
-    failures = 0
-    success_count = 0
+    page_failures = 0
+    db_failures = 0
+    page_successes = 0
+    non_empty_pages = 0
+    empty_pages = 0
+    db_rows_attempted = 0
+    db_rows_inserted = 0
     accumulated_records: list[dict[str, object]] = []
     
     # Use a queue-based approach instead of submitting all at once
@@ -342,18 +347,23 @@ def process_concurrent_urls(
                 url_result, parsed, fetch_result, error_msg = future.result()
 
                 if error_msg:
-                    failures += 1
+                    page_failures += 1
                     logging.error("[%s/%s] %s for %s", task_index, len(urls), error_msg, url)
                     continue
 
                 if parsed is None:
-                    failures += 1
+                    page_failures += 1
                     continue
 
-                success_count += 1
+                page_successes += 1
                 trade_date = parsed["trade_date"]
                 branch_code = parsed["branch_code"]
                 metric_type = parsed["metric_type"]
+                record_count = len(parsed["records"])
+                if record_count > 0:
+                    non_empty_pages += 1
+                else:
+                    empty_pages += 1
                 
                 # Write raw HTML
                 if fetch_result:
@@ -361,26 +371,30 @@ def process_concurrent_urls(
                     write_raw_html(raw_path, fetch_result["content"])
                 
                 if args.db_name:
-                    # Accumulate records for batch insert
-                    accumulated_records.extend(parsed["records"])
-                    
-                    # Flush batch if reaching threshold
-                    if len(accumulated_records) >= args.db_chunk * 2:
-                        try:
-                            from .db_writer import insert_records
-                            inserted = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
-                            logging.info(
-                                "[%s/%s] Flushed %s records into DB=%s",
-                                task_index,
-                                len(urls),
-                                inserted,
-                                args.db_name,
-                            )
-                            accumulated_records = []
-                        except Exception as exc:
-                            failures += 1
-                            logging.exception("[%s/%s] DB insert failed: %s", task_index, len(urls), exc)
-                            accumulated_records = []
+                    if record_count > 0:
+                        # Accumulate records for batch insert
+                        accumulated_records.extend(parsed["records"])
+                        
+                        # Flush batch if reaching threshold
+                        if len(accumulated_records) >= args.db_chunk * 2:
+                            try:
+                                from .db_writer import insert_records
+                                batch_stats = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
+                                db_rows_attempted += batch_stats["attempted"]
+                                db_rows_inserted += batch_stats["inserted"]
+                                logging.info(
+                                    "[%s/%s] Flushed attempted=%s inserted=%s into DB=%s",
+                                    task_index,
+                                    len(urls),
+                                    batch_stats["attempted"],
+                                    batch_stats["inserted"],
+                                    args.db_name,
+                                )
+                                accumulated_records = []
+                            except Exception as exc:
+                                db_failures += 1
+                                logging.exception("[%s/%s] DB insert failed: %s", task_index, len(urls), exc)
+                                accumulated_records = []
                 else:
                     # Write CSV immediately
                     csv_path = build_processed_csv_path(output_root, trade_date, url, branch_code, metric_type)
@@ -397,25 +411,48 @@ def process_concurrent_urls(
                     )
 
             except Exception as exc:
-                failures += 1
+                page_failures += 1
                 logging.exception("[%s/%s] Task failed for %s: %s", task_index, len(urls), url, exc)
             
             # Log progress every 1000 processed
             if processed % 1000 == 0:
-                logging.info("[PROGRESS] Processed %s/%s URLs (success=%s failures=%s)", 
-                           processed, len(urls), success_count, failures)
+                logging.info(
+                    "[PROGRESS] Processed %s/%s URLs (page_successes=%s non_empty_pages=%s empty_pages=%s page_failures=%s db_failures=%s)",
+                    processed,
+                    len(urls),
+                    page_successes,
+                    non_empty_pages,
+                    empty_pages,
+                    page_failures,
+                    db_failures,
+                )
 
         # Flush remaining records
         if accumulated_records and args.db_name:
             try:
                 from .db_writer import insert_records
-                inserted = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
-                logging.info("Final flush: inserted %s records into DB=%s", inserted, args.db_name)
+                batch_stats = insert_records(accumulated_records, args.db_name, chunk_size=args.db_chunk)
+                db_rows_attempted += batch_stats["attempted"]
+                db_rows_inserted += batch_stats["inserted"]
+                logging.info(
+                    "Final flush: attempted=%s inserted=%s into DB=%s",
+                    batch_stats["attempted"],
+                    batch_stats["inserted"],
+                    args.db_name,
+                )
             except Exception as exc:
-                failures += len(accumulated_records)
+                db_failures += 1
                 logging.exception("Final DB insert failed: %s", exc)
 
-    return success_count, failures
+    return {
+        "page_successes": page_successes,
+        "non_empty_pages": non_empty_pages,
+        "empty_pages": empty_pages,
+        "page_failures": page_failures,
+        "db_failures": db_failures,
+        "db_rows_attempted": db_rows_attempted,
+        "db_rows_inserted": db_rows_inserted,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -475,7 +512,17 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.info("Starting scrape for %s targets with max_workers=%d", len(urls), args.max_workers)
 
-    success_count, failures = process_concurrent_urls(urls, args, broker_lookup, output_root)
+    stats = process_concurrent_urls(urls, args, broker_lookup, output_root)
     
-    logging.info("Finished. successes=%s failures=%s log=%s", success_count, failures, log_path)
-    return 1 if failures else 0
+    logging.info(
+        "Finished. page_successes=%s non_empty_pages=%s empty_pages=%s page_failures=%s db_failures=%s db_rows_attempted=%s db_rows_inserted=%s log=%s",
+        stats["page_successes"],
+        stats["non_empty_pages"],
+        stats["empty_pages"],
+        stats["page_failures"],
+        stats["db_failures"],
+        stats["db_rows_attempted"],
+        stats["db_rows_inserted"],
+        log_path,
+    )
+    return 1 if stats["page_failures"] or stats["db_failures"] else 0

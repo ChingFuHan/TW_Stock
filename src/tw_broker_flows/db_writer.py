@@ -119,7 +119,7 @@ def _put_connection(dbname: str, conn) -> None:
         pass
 
 
-def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: int = 200, schema: str = "public", table: str = "stock_flow_lots_detailed") -> int:
+def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: int = 200, schema: str = "public", table: str = "stock_flow_lots_detailed") -> Dict[str, int]:
     """
     Insert parsed records into a stock flow table using the actual table columns present in the DB.
 
@@ -129,7 +129,7 @@ def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: in
     Optimized for concurrent access with better connection handling.
     """
     if not records:
-        return 0
+        return {"attempted": 0, "inserted": 0}
 
     # simple module-level cache for discovered table columns
     _table_columns_cache = globals().get("_table_columns_cache")
@@ -262,6 +262,7 @@ def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: in
 
 
     total_attempted = 0
+    total_inserted = 0
     insert_sql = f"INSERT INTO {schema}.{table} ({', '.join(cols)}) VALUES %s ON CONFLICT DO NOTHING;"
 
     # Process in chunks with better error handling
@@ -270,10 +271,12 @@ def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: in
         conn = _get_connection(dbname)
         try:
             cur = conn.cursor()
-            execute_values(cur, insert_sql, batch, fetch=False)
+            execute_values(cur, insert_sql, batch, page_size=len(batch), fetch=False)
             conn.commit()
+            inserted = max(cur.rowcount, 0)
             cur.close()
             total_attempted += len(batch)
+            total_inserted += inserted
         except Exception as e:
             try:
                 conn.rollback()
@@ -286,4 +289,4 @@ def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: in
         finally:
             _put_connection(dbname, conn)
 
-    return total_attempted
+    return {"attempted": total_attempted, "inserted": total_inserted}

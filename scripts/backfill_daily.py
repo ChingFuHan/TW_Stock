@@ -128,7 +128,7 @@ def is_empty_and_recent(progress: dict, date_str: str, retry_days: int) -> bool:
 
     規則：
     - 該日已完成但 csv_count == 0（空資料，CSV 模式）
-    - 該日已完成但 db_successes == 0（空資料，DB 模式，無任何 branch 成功）
+    - 該日已完成但 non_empty_pages == 0（空資料，DB 模式，無任何 branch 有交易資料）
     - 距離今天不超過 retry_days 天
     - 超過 retry_days 天的空資料視為永久完成（假日/非交易日）
     """
@@ -140,11 +140,11 @@ def is_empty_and_recent(progress: dict, date_str: str, retry_days: int) -> bool:
     if entry.get("csv_count", 0) > 0:
         return False
     
-    # DB 模式：有任何成功就不重試
-    if entry.get("db_successes", 0) > 0:
+    # DB 模式：只要確認有非空分點，就不重試
+    if entry.get("non_empty_pages", 0) > 0 or entry.get("db_successes", 0) > 0:
         return False
     
-    # 確認確實是空資料（沒有 CSV，也沒有 DB 寫入成功）
+    # 確認確實是空資料（沒有 CSV，也沒有任何非空分點）
     d = datetime.strptime(date_str, "%Y-%m-%d").date()
     return (date.today() - d).days <= retry_days
 
@@ -154,24 +154,21 @@ def is_empty_and_recent(progress: dict, date_str: str, retry_days: int) -> bool:
 # ---------------------------------------------------------------------------
 def parse_scraper_stats(output: str) -> dict:
     """
-    從 scraper output 擷取統計數據（successes/failures）。
+    從 scraper output 擷取最終統計數據。
     
     範例：
-      2026-04-13 01:22:59,979 INFO Finished. successes=899 failures=1 log=...
+      2026-04-13 01:22:59,979 INFO Finished. page_successes=900 non_empty_pages=0 empty_pages=900 page_failures=0 db_failures=0 db_rows_attempted=0 db_rows_inserted=0 log=...
     """
-    stats = {}
+    import re
+
     lines = output.strip().splitlines()
     for line in lines:
-        if "successes=" in line:
-            import re
-            match_s = re.search(r"successes=(\d+)", line)
-            match_f = re.search(r"failures=(\d+)", line)
-            if match_s:
-                stats["successes"] = int(match_s.group(1))
-            if match_f:
-                stats["failures"] = int(match_f.group(1))
-            break
-    return stats
+        if "Finished." not in line:
+            continue
+        matches = re.findall(r"([a-z_]+)=(\d+)", line)
+        if matches:
+            return {key: int(value) for key, value in matches}
+    return {}
 
 
 def scrape_one_day(
@@ -185,7 +182,8 @@ def scrape_one_day(
     對單一日期執行抓取。
 
     回傳 (exit_code, output_summary, stats_dict)
-    stats_dict 包含 {'successes': int, 'failures': int} 若 scraper 有輸出
+    stats_dict 會包含最終摘要中的整數欄位，例如：
+    {'page_successes': int, 'non_empty_pages': int, 'empty_pages': int, ...}
     """
     cmd = [
         PYTHON_EXE, "-m", "src.tw_broker_flows",
@@ -404,9 +402,17 @@ def main(argv: list[str] | None = None) -> int:
 
             csv_count = count_processed_csvs(date_str)
 
+            page_successes = stats.get("page_successes", stats.get("successes", 0))
+            non_empty_pages = stats.get("non_empty_pages", stats.get("db_successes", 0))
+            empty_pages = stats.get("empty_pages", 0)
+            page_failures = stats.get("page_failures", stats.get("failures", 0))
+            db_failures = stats.get("db_failures", 0)
+            db_rows_attempted = stats.get("db_rows_attempted", 0)
+            db_rows_inserted = stats.get("db_rows_inserted", 0)
+
             # 判定成功條件（優先順序）：
             # 1. 有 CSV 產出（--db-name 無此項）
-            # 2. --db-name 模式 + stats 中 successes > 0
+            # 2. --db-name 模式 + stats 中 non_empty_pages > 0
             # 3. exit_code == 0（空資料或全部失敗但成功完成）
             
             if csv_count > 0:
@@ -420,29 +426,53 @@ def main(argv: list[str] | None = None) -> int:
                     "csv_count": csv_count,
                     "exit_code": exit_code,
                 })
-            elif args.db_name and stats.get("successes", 0) > 0:
-                # DB 模式：有成功的 branch 寫入
+            elif args.db_name and non_empty_pages > 0:
+                # DB 模式：有非空分點，不再把 page 成功數誤寫成 DB 寫入成功數
                 success_count += 1
-                successes = stats.get("successes", 0)
-                failures = stats.get("failures", 0)
+                prefix = "  ✓ 完成" if exit_code == 0 and page_failures == 0 else "  △ 完成 (部分失敗)"
                 logger.info(
-                    f"  ✓ 完成 (DB 寫入): {successes} 成功 {failures} 失敗"
+                    f"{prefix}: 頁面成功 {page_successes} / 有資料分點 {non_empty_pages} / "
+                    f"空資料分點 {empty_pages} / 分點失敗 {page_failures} / DB 失敗 {db_failures} / "
+                    f"DB 嘗試 {db_rows_attempted} 筆 / DB 新增 {db_rows_inserted} 筆"
                 )
                 mark_date_completed(progress, date_str, {
                     "csv_count": 0,
                     "exit_code": exit_code,
-                    "db_successes": successes,
-                    "db_failures": failures,
+                    "page_successes": page_successes,
+                    "non_empty_pages": non_empty_pages,
+                    "empty_pages": empty_pages,
+                    "page_failures": page_failures,
+                    "db_failures": db_failures,
+                    "db_rows_attempted": db_rows_attempted,
+                    "db_rows_inserted": db_rows_inserted,
                     "source": "db_insert",
                 })
             elif exit_code == 0:
                 # 成功執行但無資料或無 CSV（非交易日或假日）
                 empty_count += 1
-                logger.info(f"  ○ 完成但無資料 (可能為非交易日或假日)")
-                mark_date_completed(progress, date_str, {
-                    "csv_count": 0,
-                    "exit_code": exit_code,
-                })
+                if args.db_name:
+                    logger.info(
+                        f"  ○ 完成但無資料: 頁面成功 {page_successes} / 空資料分點 {empty_pages} / "
+                        f"分點失敗 {page_failures} / DB 失敗 {db_failures} / DB 新增 {db_rows_inserted} 筆"
+                    )
+                    mark_date_completed(progress, date_str, {
+                        "csv_count": 0,
+                        "exit_code": exit_code,
+                        "page_successes": page_successes,
+                        "non_empty_pages": non_empty_pages,
+                        "empty_pages": empty_pages,
+                        "page_failures": page_failures,
+                        "db_failures": db_failures,
+                        "db_rows_attempted": db_rows_attempted,
+                        "db_rows_inserted": db_rows_inserted,
+                        "source": "db_insert",
+                    })
+                else:
+                    logger.info(f"  ○ 完成但無資料 (可能為非交易日或假日)")
+                    mark_date_completed(progress, date_str, {
+                        "csv_count": 0,
+                        "exit_code": exit_code,
+                    })
             else:
                 # 真正的失敗：exit_code != 0 且沒有產出
                 fail_count += 1
