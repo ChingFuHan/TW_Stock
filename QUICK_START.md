@@ -1,5 +1,19 @@
 # 快速开始指南
 
+## 📦 前置安装（第一次必做）
+
+clone 下来后**先完成环境安装**（建 venv + 装套件 + 设 .env），最简单：
+
+```powershell
+.\scripts\setup.ps1
+```
+
+详细步骤与疑难排解见 `README.md`。
+> **最常见错误**：建了 venv 却忘了 `pip install -r requirements.txt`，跑 DB 回补时会出现
+> `ModuleNotFoundError: No module named 'psycopg2'`。
+
+---
+
 ## 🚀 基本命令
 
 ### 最简单的用法
@@ -179,6 +193,13 @@ INFO Finished. successes=2292 failures=237
 ---
 
 ## 🐛 故障排查
+
+### 问题: "ModuleNotFoundError: No module named 'psycopg2'"
+**原因**: 建了 venv 但没安装依赖套件（最常见）
+**解决**:
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
 ### 问题: "Connection refused" 或网络错误
 **原因**: 网络连接问题或目标网站无响应

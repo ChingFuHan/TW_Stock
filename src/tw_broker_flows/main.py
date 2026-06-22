@@ -460,6 +460,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from dotenv import load_dotenv
         load_dotenv()
+    except ModuleNotFoundError:
+        import sys
+        print(
+            "[warn] python-dotenv 未安裝，.env 不會被載入；DB 模式（--db-name）會因讀不到連線資訊而失敗。"
+            r" 請先執行： .\.venv\Scripts\python.exe -m pip install -r requirements.txt",
+            file=sys.stderr,
+        )
     except Exception:
         pass
 
