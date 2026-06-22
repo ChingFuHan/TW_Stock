@@ -135,7 +135,58 @@ lookup 匯出後的參考檔:
   --end-date 2026-04-02
 ```
 
+## 歷史回補 / 每日更新（Backfill）
+
+`scripts/backfill_daily.py` 會逐日呼叫主程式，支援斷點續傳與空資料重試。
+
+> **重要**：回補請一律加 `--db-name <資料庫名>`。
+> 此模式只會把資料寫進 PostgreSQL，**不會**產生 `data/raw` 與 `data/processed` 檔案，避免佔用硬碟。
+> 因為 DB 模式不產 CSV，跳過已完成日期請改用 `--resume`（讀取進度檔 `data/logs/backfill_progress.json`）。
+
+歷史回補進 DB（推薦）:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_daily.py `
+  --start-date 2017-01-01 `
+  --end-date 2026-04-10 `
+  --db-name tw `
+  --resume
+```
+
+每日更新（只抓今天）進 DB:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_daily.py `
+  --start-date 2026-06-23 `
+  --end-date 2026-06-23 `
+  --db-name tw
+```
+
+指定 metric-type（`lots` / `amount` / `both`，預設 `lots`）:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_daily.py `
+  --start-date 2025-01-01 --end-date 2025-12-31 `
+  --metric-type lots --db-name tw --resume
+```
+
+Dry-run（只列出要抓的日期，不實際執行）:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_daily.py `
+  --start-date 2024-01-01 --end-date 2024-01-31 --dry-run
+```
+
+常用選項:
+- `--resume`：從上次進度繼續，自動跳過已完成日期
+- `--retry-failed`：重新嘗試之前失敗的日期
+- `--empty-retry-days 30`：距今 N 天內的空資料仍會重試，超過視為非交易日（預設 30，設 0 則不重試）
+- `--max-workers 15`：每日抓取的並行數（預設 15）
+- `--delay 1.0`：每日之間的延遲秒數，避免被封鎖
+
 ## 輸出
+
+> 使用 `--db-name` 時，資料直接寫入 PostgreSQL，**不會**輸出 `data/raw` / `data/processed` 檔案（僅保留小體積的 `data/logs/run_*.log` 與 `data/reference/*.csv`）。下列為**未指定** `--db-name` 的 CSV 模式輸出。
 
 執行後會輸出:
 - `data/raw/{trade_date}/...html`

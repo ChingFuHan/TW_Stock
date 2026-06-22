@@ -365,8 +365,8 @@ def process_concurrent_urls(
                 else:
                     empty_pages += 1
                 
-                # Write raw HTML
-                if fetch_result:
+                # Write raw HTML（DB 模式不落地，避免佔用硬碟）
+                if fetch_result and not args.db_name:
                     raw_path = build_raw_html_path(output_root, trade_date, url, branch_code, metric_type)
                     write_raw_html(raw_path, fetch_result["content"])
                 
