@@ -3,4 +3,3 @@ __pycache__/
 .venv/
 .tmp/
 .env
-pg_sample_code/db_util.py
