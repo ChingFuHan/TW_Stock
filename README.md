@@ -1,4 +1,4 @@
-# gemini_taiwan_stock
+# TW_Stock
 
 台股券商 / 分行每日買賣超資料爬蟲。
 
