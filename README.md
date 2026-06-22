@@ -46,6 +46,19 @@ python -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
+### DB 模式（`--db-name`）額外設定
+
+回補 / 寫入 PostgreSQL 需要 `psycopg2-binary` 與 `python-dotenv`，已列入 `requirements.txt`，上面的 `pip install -r requirements.txt` 會一併裝好。
+
+連線機密放在專案根目錄的 `.env`（已被 `.gitignore`，不會進版控）。請複製範本後填入自己的連線資訊:
+
+```powershell
+Copy-Item .env.example .env
+# 接著編輯 .env，填入 PGHOST / PGPORT / PGUSER / PGPASSWORD（或單一 DATABASE_URL）
+```
+
+資料表 schema 見 `pg_sample_code/create_*.sql`。
+
 ## Daily URL 規則
 
 daily 模式會依照下列參數組 URL:

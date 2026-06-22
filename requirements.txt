@@ -1,3 +1,5 @@
 # Target runtime: Python 3.11.x
-# This project currently uses Python standard library only.
+# 標準函式庫為主；DB 寫入（--db-name）需要 psycopg2 與 python-dotenv。
 # Keep this file so the repo has a stable venv + pip workflow.
+psycopg2-binary>=2.9
+python-dotenv>=1.0
