@@ -456,6 +456,13 @@ def process_concurrent_urls(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 載入 .env（若有），把 Postgres 連線等機密灌進 os.environ
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+
     parser = build_argument_parser()
     args = parser.parse_args(argv)
 
