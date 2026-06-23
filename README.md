@@ -89,7 +89,7 @@ Copy-Item .env.example .env
 
 > ℹ️ **欄名**：實際部署的 `stock_flow_lots_detailed` 用 legacy 欄名 **`code`/`cname`**（個股代碼/名稱）。`db_writer.py` 會在執行期把解析出的 `stock_code`/`stock_name` 對應寫入此表的 `code`/`cname`，回補正常運作。（`stock_flow_lots` 替代表才用 `stock_code`/`stock_name`。）
 >
-> 回補用 `--all-branches` 時會從官網抓分點清單，**不需要** `brokers`/`branches` 表也能跑；這兩張表是給你 DB 端查詢券商/分行名稱用的（選用）。
+> 回補用 `--all-branches` 時會從官網抓分點清單，**不需要** `brokers`/`branches` 表也能跑；這兩張表是給你 DB 端查詢券商/分行名稱用的（選用）。**DB 模式回補會自動把完整 lookup upsert 進這兩張表**（表需先建好；未建只會警告、不中斷）。
 
 ### 各表主要欄位（完整 schema 見 [`docs/DATABASE.md`](docs/DATABASE.md)）
 
@@ -120,21 +120,24 @@ source_url, fetched_at, created_at
 #    等同手動： psql -U <user> -d tw -f pg_sample_code\create_brokers_branches.sql
 #               psql -U <user> -d tw -f pg_sample_code\create_stock_flow_lots_detailed.sql
 
-# 2) （選用）灌券商/分行參考表 brokers / branches
-.\.venv\Scripts\python.exe scripts\update_brokers.py --db tw
-
-# 3) 回補 flow 資料到 stock_flow_lots_detailed（DB 模式不落地、可斷點續跑）
+# 2) 回補 flow 資料到 stock_flow_lots_detailed（DB 模式不落地、可斷點續跑）
+#    這步會「自動」把完整 brokers / branches 一併 upsert 進 DB（不必另外手動灌）
 .\.venv\Scripts\python.exe scripts\backfill_daily.py `
   --start-date 2026-06-18 --end-date 2026-06-22 --db-name tw --resume
 #    要全部歷史就把日期區間拉大，例如 --start-date 2025-12-01 --end-date 2026-04-10
 
-# 4) 驗證資料量
+# （選用）若想單獨刷新 brokers / branches，可手動：
+# .\.venv\Scripts\python.exe scripts\update_brokers.py --db tw
+
+# 3) 驗證資料量
 #    psql -U <user> -d tw -c "SELECT count(*) FROM public.stock_flow_lots_detailed;"
 #    psql -U <user> -d tw -c "SELECT count(*) FROM public.brokers;"
+#    psql -U <user> -d tw -c "SELECT count(*) FROM public.branches;"
 ```
 
 > 表必須先建好（步驟 1），否則回補會報 `Could not find columns for table ... stock_flow_lots_detailed`。
 > 重跑安全：所有寫入皆 `ON CONFLICT DO NOTHING`，重複回補同一天不會產生重複資料。
+> **brokers / branches**：DB 模式回補會自動 upsert 完整 lookup（與爬取成敗無關），log 會印 `brokers/branches total/inserted` 可核對；詳見 [`docs/DATABASE.md`](docs/DATABASE.md)。
 
 ## Daily URL 規則
 

@@ -492,6 +492,23 @@ def main(argv: list[str] | None = None) -> int:
             branch_path,
         )
 
+    # DB 模式：自動把完整 lookup upsert 進 public.brokers / public.branches
+    if args.db_name and broker_lookup is not None:
+        try:
+            from .db_writer import upsert_reference
+            ref = upsert_reference(broker_lookup, args.db_name)
+            logging.info(
+                "Upserted reference into DB: brokers total=%s inserted=%s | branches total=%s inserted=%s | skipped_invalid=%s row_failures=%s",
+                ref["brokers_total"], ref["brokers_inserted"],
+                ref["branches_total"], ref["branches_inserted"],
+                ref["skipped_invalid"], ref["row_failures"],
+            )
+        except Exception as exc:
+            logging.warning(
+                "Reference upsert 略過/失敗（確認 brokers/branches 表已建立，或先跑 scripts/init_db.py）：%s",
+                exc,
+            )
+
     if args.export_lookup_only:
         logging.info("Finished lookup export only. log=%s", log_path)
         return 0

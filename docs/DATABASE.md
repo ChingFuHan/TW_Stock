@@ -8,8 +8,8 @@
 | 表 | 用途 | 回補是否需要 | 由誰寫入 | 建表 SQL |
 |---|---|---|---|---|
 | `public.stock_flow_lots_detailed` | **回補主表**：每日券商分點個股買賣超（張數） | ✅ 必要 | `src/tw_broker_flows/db_writer.py`（`backfill_daily.py --db-name`） | `create_stock_flow_lots_detailed.sql` |
-| `public.brokers` | 券商代碼 ↔ 名稱對照（參考表） | ⬜ 選用 | `scripts/update_brokers.py` | `create_brokers_branches.sql` |
-| `public.branches` | 分行代碼 ↔ 名稱對照（參考表，外鍵指向 brokers） | ⬜ 選用 | `scripts/update_brokers.py` | `create_brokers_branches.sql` |
+| `public.brokers` | 券商代碼 ↔ 名稱對照（參考表） | ⬜ 選用 | **回補時自動 upsert**（main.py，DB 模式）／`scripts/update_brokers.py` | `create_brokers_branches.sql` |
+| `public.branches` | 分行代碼 ↔ 名稱對照（參考表，外鍵指向 brokers） | ⬜ 選用 | **回補時自動 upsert**（main.py，DB 模式）／`scripts/update_brokers.py` | `create_brokers_branches.sql` |
 | `public.stock_flow_lots` | flow 的**替代 schema**（以 `trade_date`+`metric_type` 為鍵，**非實際部署表**） | ⬜ 替代 | 非預設寫入目標 | `create_stock_flow_lots.sql` |
 
 關係：`branches.broker_code` →（FK `branches_fk_broker`，MATCH SIMPLE）→ `brokers.broker_code`。flow 表與 brokers/branches 無 FK（flow 表自帶 broker/branch 名稱欄位）。
@@ -205,10 +205,12 @@ CREATE INDEX IF NOT EXISTS idx_branches_name
 #    psql -U <user> -d tw -f pg_sample_code\create_brokers_branches.sql
 #    psql -U <user> -d tw -f pg_sample_code\create_stock_flow_lots_detailed.sql
 
-# 2) （選用）灌券商/分行參考表 brokers / branches
-.\.venv\Scripts\python.exe scripts\update_brokers.py --db tw
+# 2) brokers / branches 參考表：DB 模式回補（步驟 3）會「自動 upsert」完整 lookup，
+#    通常不需手動。若想先單獨灌或手動刷新，才需要這行（選用）：
+# .\.venv\Scripts\python.exe scripts\update_brokers.py --db tw
 
 # 3) 回補 flow 資料到 stock_flow_lots_detailed（DB 模式不落地、可斷點續跑）
+#    這步會同時自動把 brokers / branches 補齊（每天呼叫、ON CONFLICT 跳過已存在者）
 .\.venv\Scripts\python.exe scripts\backfill_daily.py `
   --start-date 2026-06-18 --end-date 2026-06-22 --db-name tw --resume
 #    要回補全部歷史就把區間拉大，例如 --start-date 2025-12-01 --end-date 2026-04-10
@@ -223,7 +225,12 @@ SELECT count(*) FROM public.branches;                          -- 分行數
 SELECT max(da), min(da) FROM public.stock_flow_lots_detailed;  -- 已回補的日期範圍
 ```
 
+### brokers / branches 自動補齊（完整性）
+- DB 模式回補時，`main.py` 會把**完整 lookup（全部券商/分點）** upsert 進 `brokers`/`branches`，**與爬取成敗無關**——即使某分點當天頁面失敗或空資料，它的對照仍會被寫入。
+- 寫入採「批次 + 失敗自動退回逐列」，單列問題不影響其餘；無效列（缺 `broker_code`/`branch_code_raw`）會被略過並計入 `skipped_invalid`。
+- log 會印 `brokers total/inserted | branches total/inserted | skipped_invalid | row_failures`，可用 `SELECT count(*)` 與 `total` 核對。回補每天都呼叫一次，**缺漏隔天自動補齊**。
+
 ### 注意事項
-- **表必須先建好（步驟 1）**，否則回補會報 `Could not find columns for table ... stock_flow_lots_detailed`。
+- **表必須先建好（步驟 1）**，否則回補會報 `Could not find columns for table ... stock_flow_lots_detailed`（brokers/branches 未建則 upsert 只警告、不中斷）。
 - 所有寫入皆 `ON CONFLICT DO NOTHING`，**重複回補同一天不會產生重複資料**，可安心重跑。
 - DB 模式（`--db-name`）只寫 Postgres、**不**輸出 `data/raw` / `data/processed`。

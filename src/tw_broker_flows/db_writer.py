@@ -290,3 +290,115 @@ def insert_records(records: List[Dict[str, object]], dbname: str, chunk_size: in
             _put_connection(dbname, conn)
 
     return {"attempted": total_attempted, "inserted": total_inserted}
+
+
+def _upsert_rows(conn, insert_sql: str, rows: List[tuple], chunk_size: int, stats: Dict[str, int]) -> int:
+    """批次 upsert；任一塊失敗就退回逐列 insert，確保單列問題不拖垮其餘。回傳新增列數。"""
+    inserted = 0
+    if not rows:
+        return inserted
+
+    for i in range(0, len(rows), chunk_size):
+        batch = rows[i : i + chunk_size]
+        cur = conn.cursor()
+        try:
+            execute_values(cur, insert_sql, batch, page_size=len(batch), fetch=False)
+            conn.commit()
+            inserted += max(cur.rowcount, 0)
+            cur.close()
+        except Exception:
+            # 整批失敗 → 退回逐列，盡量把有效列都寫進去
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cur.close()
+            for row in batch:
+                placeholders = "(" + ",".join(["%s"] * len(row)) + ")"
+                single_sql = insert_sql.replace("VALUES %s", "VALUES " + placeholders, 1)
+                c2 = conn.cursor()
+                try:
+                    c2.execute(single_sql, row)
+                    conn.commit()
+                    inserted += max(c2.rowcount, 0)
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    stats["row_failures"] += 1
+                finally:
+                    c2.close()
+    return inserted
+
+
+def upsert_reference(lookup: Any, dbname: str, chunk_size: int = 500) -> Dict[str, int]:
+    """
+    把 broker/branch lookup upsert 進 public.brokers / public.branches。
+
+    - 走**完整 lookup**（全部券商/分點），與爬取成敗無關。
+    - 過濾無效列（缺 broker_code / branch_code_raw）→ 計入 skipped_invalid。
+    - 批次 + 逐列退回 → 確保每個有效列都進。
+    - ON CONFLICT DO NOTHING → 已存在者跳過，最終保證全部都在表內。
+    """
+    from .broker_lookup import get_broker_names, get_broker_branches, normalize_branch_code
+
+    stats: Dict[str, int] = {
+        "brokers_total": 0,
+        "brokers_inserted": 0,
+        "branches_total": 0,
+        "branches_inserted": 0,
+        "skipped_invalid": 0,
+        "row_failures": 0,
+    }
+    if lookup is None:
+        return stats
+
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    broker_names = get_broker_names(lookup) or {}
+    broker_branches = get_broker_branches(lookup) or {}
+
+    # 組 broker 列（過濾無效）
+    broker_rows: List[tuple] = []
+    for code in sorted(broker_names.keys()):
+        bc = str(code).strip() if code is not None else ""
+        if not bc:
+            stats["skipped_invalid"] += 1
+            continue
+        broker_rows.append((bc, broker_names[code], now_iso))
+    stats["brokers_total"] = len(broker_rows)
+
+    # 組 branch 列（過濾無效）
+    branch_rows: List[tuple] = []
+    for code in sorted(broker_branches.keys()):
+        bc = str(code).strip() if code is not None else ""
+        branch_map = broker_branches[code] or {}
+        for raw in sorted(branch_map.keys()):
+            raw_s = str(raw).strip() if raw is not None else ""
+            if not bc or not raw_s:
+                stats["skipped_invalid"] += 1
+                continue
+            norm = normalize_branch_code(raw_s)
+            is_broker_level = bool(
+                (norm is not None and str(norm) == str(bc)) or (str(raw_s) == str(bc))
+            )
+            branch_rows.append((bc, raw_s, norm, branch_map[raw], is_broker_level, now_iso))
+    stats["branches_total"] = len(branch_rows)
+
+    broker_sql = (
+        "INSERT INTO public.brokers(broker_code, broker_name, fetched_at) "
+        "VALUES %s ON CONFLICT DO NOTHING"
+    )
+    branch_sql = (
+        "INSERT INTO public.branches(broker_code, branch_code_raw, branch_code, "
+        "branch_name, is_broker_level, fetched_at) VALUES %s ON CONFLICT DO NOTHING"
+    )
+
+    conn = _get_connection(dbname)
+    try:
+        stats["brokers_inserted"] = _upsert_rows(conn, broker_sql, broker_rows, chunk_size, stats)
+        stats["branches_inserted"] = _upsert_rows(conn, branch_sql, branch_rows, chunk_size, stats)
+    finally:
+        _put_connection(dbname, conn)
+
+    return stats
