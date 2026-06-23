@@ -42,7 +42,7 @@ Write-Host "==> 驗證相依套件..." -ForegroundColor Cyan
 .\.venv\Scripts\python.exe -c "import psycopg2, dotenv; print('  deps OK: psycopg2', psycopg2.__version__)"
 
 Write-Host ""
-Write-Host "✓ 環境設定完成。下一步：" -ForegroundColor Green
+Write-Host "[OK] 環境設定完成。下一步：" -ForegroundColor Green
 Write-Host "  1) 編輯 .env 填入 PGHOST / PGPORT / PGUSER / PGPASSWORD"
 Write-Host "  2) 跑單日 DB 回補測試："
 Write-Host "     .\.venv\Scripts\python.exe scripts\backfill_daily.py --start-date 2026-06-22 --end-date 2026-06-22 --db-name tw"

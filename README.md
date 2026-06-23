@@ -74,6 +74,68 @@ Copy-Item .env.example .env
 - **若沒裝 `python-dotenv`，`.env` 不會被載入**，連線會用空密碼預設而失敗——這也是為什麼安裝步驟 2 不能略過。
 - 資料表 schema 見 `pg_sample_code/create_*.sql`（用來建立 `stock_flow_lots_detailed` 等表）。
 
+## PostgreSQL 資料表
+
+DDL 在 `pg_sample_code/create_*.sql`，共定義 **4 張表**：
+
+| 表 | 用途 | 回補是否需要 | 建表 SQL |
+|---|---|---|---|
+| `public.stock_flow_lots_detailed` | **回補主表**——存每日券商分點買賣超（張數）。`backfill_daily.py --db-name` 實際寫入此表 | ✅ 必要 | `create_stock_flow_lots_detailed.sql` |
+| `public.brokers` | 券商代碼 ↔ 名稱對照（參考表） | ⬜ 選用 | `create_brokers_branches.sql` |
+| `public.branches` | 分行代碼 ↔ 名稱對照（參考表，FK 指向 brokers） | ⬜ 選用 | `create_brokers_branches.sql` |
+| `public.stock_flow_lots` | flow 的**替代 schema**（以 `trade_date`+`metric_type` 為主鍵，含 metric_type 欄）。非預設寫入目標 | ⬜ 替代 | `create_stock_flow_lots.sql` |
+
+> ⚠️ `stock_flow_lots` 與 `stock_flow_lots_detailed` **使用同名索引** `stock_flow_stock_date_idx`，**同一個資料庫不要兩張都建**（否則第二張的索引會被略過）。一般只需要 `stock_flow_lots_detailed`。
+>
+> ℹ️ 欄名相容：`db_writer.py` 寫入時會在執行期讀取目標表的實際欄位並對應，**同時相容** `stock_code`/`stock_name` 與 legacy 短欄名 `code`/`cname`。若你的既有表用的是 legacy 欄名，`init_db.py` 建索引那句可能印 `[skip]`（因 DDL 寫的是 `stock_code`），屬正常、不影響回補。
+>
+> 回補用 `--all-branches` 時會從官網抓分點清單，**不需要** `brokers`/`branches` 表也能跑；這兩張表是給你 DB 端查詢券商/分行名稱用的（選用）。
+
+### 各表主要欄位
+
+**`stock_flow_lots_detailed`**（PK: `da, stock_code, broker_code, branch_code`）
+```
+da timestamp        -- 交易日（由 trade_date 寫入）
+stock_code / stock_name
+broker_code / branch_code / branch_code_raw
+broker_name / branch_name
+buy_lots / sell_lots / net_lots   bigint   -- 買/賣/淨張數
+source_url, fetched_at, created_at
+索引：stock_code+da、da、broker_code+branch_code+da
+```
+
+**`brokers`**（PK: `broker_code`）：`broker_code, broker_name, fetched_at, created_at`
+**`branches`**（PK: `broker_code, branch_code_raw`，FK→brokers）：`branch_code, branch_name, is_broker_level, fetched_at, created_at`
+
+## 從 0 開始：建表並回補
+
+全新環境把資料庫從空的補到有資料，完整步驟：
+
+```powershell
+# 0) 安裝環境並設定 .env（見「安裝」一節，或一鍵： .\scripts\setup.ps1）
+#    .env 需填好 PGHOST/PGPORT/PGUSER/PGPASSWORD（指向目標 PostgreSQL）
+
+# 1) 建立資料表（idempotent，可重複執行；不需要 psql）
+.\.venv\Scripts\python.exe scripts\init_db.py --db tw
+#    等同手動： psql -U <user> -d tw -f pg_sample_code\create_brokers_branches.sql
+#               psql -U <user> -d tw -f pg_sample_code\create_stock_flow_lots_detailed.sql
+
+# 2) （選用）灌券商/分行參考表 brokers / branches
+.\.venv\Scripts\python.exe scripts\update_brokers.py --db tw
+
+# 3) 回補 flow 資料到 stock_flow_lots_detailed（DB 模式不落地、可斷點續跑）
+.\.venv\Scripts\python.exe scripts\backfill_daily.py `
+  --start-date 2026-06-18 --end-date 2026-06-22 --db-name tw --resume
+#    要全部歷史就把日期區間拉大，例如 --start-date 2025-12-01 --end-date 2026-04-10
+
+# 4) 驗證資料量
+#    psql -U <user> -d tw -c "SELECT count(*) FROM public.stock_flow_lots_detailed;"
+#    psql -U <user> -d tw -c "SELECT count(*) FROM public.brokers;"
+```
+
+> 表必須先建好（步驟 1），否則回補會報 `Could not find columns for table ... stock_flow_lots_detailed`。
+> 重跑安全：所有寫入皆 `ON CONFLICT DO NOTHING`，重複回補同一天不會產生重複資料。
+
 ## Daily URL 規則
 
 daily 模式會依照下列參數組 URL:
