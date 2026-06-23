@@ -76,7 +76,9 @@ Copy-Item .env.example .env
 
 ## PostgreSQL 資料表
 
-DDL 在 `pg_sample_code/create_*.sql`，共定義 **4 張表**：
+> 📑 **完整 schema（每張表的逐欄位型別、PK、FK、索引）見 [`docs/DATABASE.md`](docs/DATABASE.md)**；DDL 原始檔在 `pg_sample_code/create_*.sql`。下方為摘要。
+
+共定義 **4 張表**：
 
 | 表 | 用途 | 回補是否需要 | 建表 SQL |
 |---|---|---|---|
