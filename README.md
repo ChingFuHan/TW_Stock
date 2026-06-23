@@ -87,23 +87,21 @@ Copy-Item .env.example .env
 | `public.branches` | 分行代碼 ↔ 名稱對照（參考表，FK 指向 brokers） | ⬜ 選用 | `create_brokers_branches.sql` |
 | `public.stock_flow_lots` | flow 的**替代 schema**（以 `trade_date`+`metric_type` 為主鍵，含 metric_type 欄）。非預設寫入目標 | ⬜ 替代 | `create_stock_flow_lots.sql` |
 
-> ⚠️ `stock_flow_lots` 與 `stock_flow_lots_detailed` **使用同名索引** `stock_flow_stock_date_idx`，**同一個資料庫不要兩張都建**（否則第二張的索引會被略過）。一般只需要 `stock_flow_lots_detailed`。
->
-> ℹ️ 欄名相容：`db_writer.py` 寫入時會在執行期讀取目標表的實際欄位並對應，**同時相容** `stock_code`/`stock_name` 與 legacy 短欄名 `code`/`cname`。若你的既有表用的是 legacy 欄名，`init_db.py` 建索引那句可能印 `[skip]`（因 DDL 寫的是 `stock_code`），屬正常、不影響回補。
+> ℹ️ **欄名**：實際部署的 `stock_flow_lots_detailed` 用 legacy 欄名 **`code`/`cname`**（個股代碼/名稱）。`db_writer.py` 會在執行期把解析出的 `stock_code`/`stock_name` 對應寫入此表的 `code`/`cname`，回補正常運作。（`stock_flow_lots` 替代表才用 `stock_code`/`stock_name`。）
 >
 > 回補用 `--all-branches` 時會從官網抓分點清單，**不需要** `brokers`/`branches` 表也能跑；這兩張表是給你 DB 端查詢券商/分行名稱用的（選用）。
 
-### 各表主要欄位
+### 各表主要欄位（完整 schema 見 [`docs/DATABASE.md`](docs/DATABASE.md)）
 
-**`stock_flow_lots_detailed`**（PK: `da, stock_code, broker_code, branch_code`）
+**`stock_flow_lots_detailed`**（PK: `da, code, broker_code, branch_code`；broker_code/branch_code 為 NOT NULL）
 ```
 da timestamp        -- 交易日（由 trade_date 寫入）
-stock_code / stock_name
+code / cname        -- 個股代碼 / 名稱（legacy 欄名）
 broker_code / branch_code / branch_code_raw
 broker_name / branch_name
 buy_lots / sell_lots / net_lots   bigint   -- 買/賣/淨張數
 source_url, fetched_at, created_at
-索引：stock_code+da、da、broker_code+branch_code+da
+索引：code+da、da、broker_code+branch_code+da（生產另有兩個重複索引，見完整文件）
 ```
 
 **`brokers`**（PK: `broker_code`）：`broker_code, broker_name, fetched_at, created_at`
